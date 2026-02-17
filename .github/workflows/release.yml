@@ -15,16 +15,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build universal binary (arm64 + x86_64)
-        run: swift build -c release --arch arm64 --arch x86_64
+      - name: Build arm64
+        run: swift build -c release --arch arm64
 
-      - name: Ad-hoc codesign
-        run: codesign -s - -f .build/apple/Products/Release/MCPMacOSCalendar
+      - name: Build x86_64
+        run: swift build -c release --arch x86_64
 
-      - name: Package binary
+      - name: Create universal binary with lipo
         run: |
           mkdir -p dist
-          cp .build/apple/Products/Release/MCPMacOSCalendar dist/mcp-macos-calendar
+          lipo -create \
+            .build/arm64-apple-macosx/release/MCPMacOSCalendar \
+            .build/x86_64-apple-macosx/release/MCPMacOSCalendar \
+            -output dist/mcp-macos-calendar
+          codesign -s - -f dist/mcp-macos-calendar
           cd dist
           tar czf mcp-macos-calendar-macos-universal.tar.gz mcp-macos-calendar
           shasum -a 256 mcp-macos-calendar-macos-universal.tar.gz > mcp-macos-calendar-macos-universal.tar.gz.sha256
