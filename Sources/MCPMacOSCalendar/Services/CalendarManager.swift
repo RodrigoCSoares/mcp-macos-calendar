@@ -111,6 +111,97 @@ final class CalendarManager {
         logger.info("Deleted event: \(event.title ?? "Unknown")")
     }
 
+    func searchEvents(query: String, from startDate: Date, to endDate: Date, calendarName: String? = nil) throws -> [CalendarEvent] {
+        try ensureEventAccess()
+        let calendars = try calendarName.map { try resolveCalendars([$0], for: .event) }
+        let predicate = store.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
+        let lowered = query.lowercased()
+        return store.events(matching: predicate)
+            .filter { event in
+                [event.title, event.location, event.notes]
+                    .compactMap { $0?.lowercased() }
+                    .contains { $0.contains(lowered) }
+            }
+            .sorted { $0.startDate < $1.startDate }
+            .map(CalendarEvent.from)
+    }
+
+    func listUpcomingEvents(count: Int, calendarName: String? = nil) throws -> [CalendarEvent] {
+        try ensureEventAccess()
+        let now = Date()
+        let end = Calendar.current.date(byAdding: .year, value: 1, to: now)!
+        let calendars = try calendarName.map { try resolveCalendars([$0], for: .event) }
+        let predicate = store.predicateForEvents(withStart: now, end: end, calendars: calendars)
+        return Array(
+            store.events(matching: predicate)
+                .sorted { $0.startDate < $1.startDate }
+                .prefix(count)
+                .map(CalendarEvent.from)
+        )
+    }
+
+    func moveEvent(identifier: String, newStartDate: String, newEndDate: String?, applyToFutureEvents: Bool = false) throws -> CalendarEvent {
+        try ensureEventAccess()
+        guard let event = store.event(withIdentifier: identifier) else {
+            throw CalendarError.notFound("Event with ID '\(identifier)' not found")
+        }
+        let newStart = try parseISO8601(newStartDate, label: "new start date")
+        let duration = event.endDate.timeIntervalSince(event.startDate)
+        event.startDate = newStart
+        event.endDate = try newEndDate.map { try parseISO8601($0, label: "new end date") }
+            ?? newStart.addingTimeInterval(duration)
+        let span: EKSpan = applyToFutureEvents ? .futureEvents : .thisEvent
+        try store.save(event, span: span, commit: true)
+        logger.info("Moved event: \(event.title ?? "Unknown")")
+        return CalendarEvent.from(event)
+    }
+
+    func duplicateEvent(identifier: String, newStartDate: String, newEndDate: String?) throws -> CalendarEvent {
+        try ensureEventAccess()
+        guard let source = store.event(withIdentifier: identifier) else {
+            throw CalendarError.notFound("Event with ID '\(identifier)' not found")
+        }
+        let newStart = try parseISO8601(newStartDate, label: "new start date")
+        let duration = source.endDate.timeIntervalSince(source.startDate)
+
+        let event = EKEvent(eventStore: store)
+        event.title = source.title
+        event.startDate = newStart
+        event.endDate = try newEndDate.map { try parseISO8601($0, label: "new end date") }
+            ?? newStart.addingTimeInterval(duration)
+        event.isAllDay = source.isAllDay
+        event.location = source.location
+        event.notes = source.notes
+        event.url = source.url
+        event.calendar = source.calendar
+        source.alarms?.forEach { event.addAlarm(EKAlarm(relativeOffset: $0.relativeOffset)) }
+
+        try store.save(event, span: .thisEvent, commit: true)
+        logger.info("Duplicated event: \(source.title ?? "Unknown")")
+        return CalendarEvent.from(event)
+    }
+
+    func listRecurringEvents(from startDate: Date, to endDate: Date, calendarName: String? = nil) throws -> [CalendarEvent] {
+        try ensureEventAccess()
+        let calendars = try calendarName.map { try resolveCalendars([$0], for: .event) }
+        let predicate = store.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars)
+        return store.events(matching: predicate)
+            .filter(\.hasRecurrenceRules)
+            .sorted { $0.startDate < $1.startDate }
+            .map(CalendarEvent.from)
+    }
+
+    func listTodayEvents(calendarName: String? = nil) throws -> [CalendarEvent] {
+        let (start, end) = dayBounds(for: Date())
+        return try listEvents(from: start, to: end, calendarName: calendarName)
+    }
+
+    func listTomorrowEvents(calendarName: String? = nil) throws -> [CalendarEvent] {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let (start, end) = dayBounds(for: tomorrow)
+        return try listEvents(from: start, to: end, calendarName: calendarName)
+    }
+
     // MARK: - Reminders
 
     func listReminders(calendarName: String? = nil, filter: ReminderFilter = .all) async throws -> [CalendarReminder] {
@@ -181,6 +272,83 @@ final class CalendarManager {
         logger.info("Deleted reminder: \(reminder.title ?? "Unknown")")
     }
 
+    func getReminder(identifier: String) throws -> CalendarReminder {
+        try ensureReminderAccess()
+        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else {
+            throw CalendarError.notFound("Reminder with ID '\(identifier)' not found")
+        }
+        return CalendarReminder.from(reminder)
+    }
+
+    func searchReminders(query: String, calendarName: String? = nil) async throws -> [CalendarReminder] {
+        try ensureReminderAccess()
+        let calendars = try calendarName.map { try resolveCalendars([$0], for: .reminder) }
+        let predicate = store.predicateForReminders(in: calendars)
+        let lowered = query.lowercased()
+        return await withCheckedContinuation { continuation in
+            store.fetchReminders(matching: predicate) { reminders in
+                let results = (reminders ?? [])
+                    .filter { r in
+                        [r.title, r.notes]
+                            .compactMap { $0?.lowercased() }
+                            .contains { $0.contains(lowered) }
+                    }
+                    .map { CalendarReminder.from($0) }
+                continuation.resume(returning: results)
+            }
+        }
+    }
+
+    func completeReminder(identifier: String) throws -> CalendarReminder {
+        try ensureReminderAccess()
+        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else {
+            throw CalendarError.notFound("Reminder with ID '\(identifier)' not found")
+        }
+        reminder.isCompleted = true
+        try store.save(reminder, commit: true)
+        logger.info("Completed reminder: \(reminder.title ?? "Unknown")")
+        return CalendarReminder.from(reminder)
+    }
+
+    func uncompleteReminder(identifier: String) throws -> CalendarReminder {
+        try ensureReminderAccess()
+        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else {
+            throw CalendarError.notFound("Reminder with ID '\(identifier)' not found")
+        }
+        reminder.isCompleted = false
+        try store.save(reminder, commit: true)
+        logger.info("Uncompleted reminder: \(reminder.title ?? "Unknown")")
+        return CalendarReminder.from(reminder)
+    }
+
+    func listOverdueReminders(calendarName: String? = nil) async throws -> [CalendarReminder] {
+        try ensureReminderAccess()
+        let calendars = try calendarName.map { try resolveCalendars([$0], for: .reminder) }
+        let predicate = store.predicateForIncompleteReminders(
+            withDueDateStarting: nil, ending: Date(), calendars: calendars
+        )
+        return await withCheckedContinuation { continuation in
+            store.fetchReminders(matching: predicate) { reminders in
+                continuation.resume(returning: (reminders ?? []).map { CalendarReminder.from($0) })
+            }
+        }
+    }
+
+    func batchCompleteReminders(identifiers: [String]) throws -> [CalendarReminder] {
+        try ensureReminderAccess()
+        let results = try identifiers.map { id -> CalendarReminder in
+            guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
+                throw CalendarError.notFound("Reminder with ID '\(id)' not found")
+            }
+            reminder.isCompleted = true
+            try store.save(reminder, commit: false)
+            return CalendarReminder.from(reminder)
+        }
+        try store.commit()
+        logger.info("Batch completed \(identifiers.count) reminders")
+        return results
+    }
+
     // MARK: - Calendars
 
     func listCalendars(for entityType: EKEntityType) -> [CalendarInfo] {
@@ -215,6 +383,39 @@ final class CalendarManager {
         }
         try store.removeCalendar(calendar, commit: true)
         logger.info("Deleted calendar: \(calendar.title)")
+    }
+
+    func getCalendar(identifier: String? = nil, name: String? = nil) throws -> CalendarInfo {
+        let calendar: EKCalendar?
+        if let identifier {
+            calendar = store.calendars(for: .event).first { $0.calendarIdentifier == identifier }
+                ?? store.calendars(for: .reminder).first { $0.calendarIdentifier == identifier }
+        } else if let name {
+            calendar = store.calendars(for: .event).first { $0.title == name }
+                ?? store.calendars(for: .reminder).first { $0.title == name }
+        } else {
+            throw CalendarError.invalidInput("Either calendarId or calendarName must be provided")
+        }
+        guard let calendar else {
+            throw CalendarError.notFound("Calendar not found")
+        }
+        return CalendarInfo.from(calendar)
+    }
+
+    func renameCalendar(identifier: String, newTitle: String) throws -> CalendarInfo {
+        let calendar = store.calendars(for: .event).first { $0.calendarIdentifier == identifier }
+            ?? store.calendars(for: .reminder).first { $0.calendarIdentifier == identifier }
+        guard let calendar else {
+            throw CalendarError.notFound("Calendar with ID '\(identifier)' not found")
+        }
+        guard calendar.allowsContentModifications else {
+            throw CalendarError.operationFailed("Calendar '\(calendar.title)' is immutable")
+        }
+        let oldTitle = calendar.title
+        calendar.title = newTitle
+        try store.saveCalendar(calendar, commit: true)
+        logger.info("Renamed calendar: \(oldTitle) -> \(newTitle)")
+        return CalendarInfo.from(calendar)
     }
 
     // MARK: - Availability
@@ -300,6 +501,13 @@ private extension CalendarManager {
         guard let recurrence else { return }
         item.recurrenceRules?.forEach { item.removeRecurrenceRule($0) }
         item.addRecurrenceRule(try recurrence.toEKRecurrenceRule())
+    }
+
+    func dayBounds(for date: Date) -> (Date, Date) {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: date)
+        let end = cal.date(byAdding: .day, value: 1, to: start)!
+        return (start, end)
     }
 }
 

@@ -6,9 +6,12 @@ A native Swift MCP server for macOS Calendar and Reminders. Gives AI assistants 
 
 ## Features
 
-- **14 tools** covering events, reminders, calendars, and availability
+- **29 tools** covering events, reminders, calendars, and availability
 - **3 resources** for browsing calendars and sources
 - Full CRUD for events and reminders
+- Search events and reminders by text
+- Convenience tools: `today`, `tomorrow`, `list_upcoming`, `complete_reminder`
+- Batch operations (complete multiple reminders at once)
 - Recurrence rules (daily, weekly, monthly, yearly with advanced options)
 - Attendees (read-only) and availability checking
 - Multiple alarm support
@@ -83,20 +86,48 @@ If you deny Reminders access, the server will still work for calendar events -- 
 
 ## Tools
 
+### Events
+
 | Tool | Description |
 |---|---|
-| `list_calendars` | List event calendars and/or reminder lists |
 | `list_events` | Query events by date range, optionally filtered by calendar |
 | `get_event` | Get event details by ID, including attendees |
 | `create_event` | Create event with title, time, location, notes, URL, alarms, recurrence |
 | `update_event` | Update any event field (partial updates supported) |
 | `delete_event` | Delete event (single occurrence or all future) |
+| `search_events` | Full-text search across event titles, notes, and locations |
+| `list_upcoming` | List next N upcoming events (no date range needed) |
+| `move_event` | Move event to a new time (preserves duration) |
+| `duplicate_event` | Clone an event to a different date/time |
+| `list_recurring_events` | List events with recurrence rules in a date range |
+| `today` | List all events for today (no parameters needed) |
+| `tomorrow` | List all events for tomorrow (no parameters needed) |
+
+### Reminders
+
+| Tool | Description |
+|---|---|
 | `list_reminders` | List reminders -- filter by list, status (all/incomplete/completed), date range |
+| `get_reminder` | Get reminder details by ID |
 | `create_reminder` | Create reminder with title, notes, due date, priority, alarms, recurrence |
 | `update_reminder` | Update reminder fields, mark complete/incomplete |
 | `delete_reminder` | Delete a reminder |
+| `search_reminders` | Full-text search across reminder titles and notes |
+| `complete_reminder` | Mark a reminder as complete |
+| `uncomplete_reminder` | Mark a completed reminder as incomplete |
+| `list_overdue_reminders` | List incomplete reminders past their due date |
+| `batch_complete_reminders` | Mark multiple reminders complete at once |
+
+### Calendars & Sources
+
+| Tool | Description |
+|---|---|
+| `list_calendars` | List event calendars and/or reminder lists |
+| `get_calendar` | Get calendar details by ID or name |
 | `create_calendar` | Create a new calendar or reminder list under a source |
 | `delete_calendar` | Delete a calendar (and all its events/reminders) |
+| `rename_calendar` | Rename an existing calendar or reminder list |
+| `list_sources` | List calendar sources (iCloud, Exchange, Local, etc.) |
 | `check_availability` | Find free/busy time slots in a date range |
 
 ## Resources

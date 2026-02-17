@@ -84,13 +84,29 @@ final class CalendarMCPServer {
             case "create_event":      return try encodeResult(handleCreateEvent(args), prefix: "Event created successfully:")
             case "update_event":      return try encodeResult(handleUpdateEvent(args), prefix: "Event updated successfully:")
             case "delete_event":      return try textResult(handleDeleteEvent(args))
+            case "search_events":     return try encodeResult(handleSearchEvents(args))
+            case "list_upcoming":     return try encodeResult(handleListUpcoming(args))
+            case "move_event":        return try encodeResult(handleMoveEvent(args), prefix: "Event moved successfully:")
+            case "duplicate_event":   return try encodeResult(handleDuplicateEvent(args), prefix: "Event duplicated successfully:")
+            case "list_recurring_events": return try encodeResult(handleListRecurringEvents(args))
+            case "today":             return try encodeResult(handleToday(args))
+            case "tomorrow":          return try encodeResult(handleTomorrow(args))
             case "list_reminders":    return try await encodeResult(handleListReminders(args))
+            case "get_reminder":      return try encodeResult(handleGetReminder(args))
             case "create_reminder":   return try encodeResult(handleCreateReminder(args), prefix: "Reminder created:")
             case "update_reminder":   return try encodeResult(handleUpdateReminder(args), prefix: "Reminder updated:")
             case "delete_reminder":   return try textResult(handleDeleteReminder(args))
+            case "search_reminders":  return try await encodeResult(handleSearchReminders(args))
+            case "complete_reminder": return try encodeResult(handleCompleteReminder(args), prefix: "Reminder completed:")
+            case "uncomplete_reminder": return try encodeResult(handleUncompleteReminder(args), prefix: "Reminder uncompleted:")
+            case "list_overdue_reminders": return try await encodeResult(handleListOverdueReminders(args))
+            case "batch_complete_reminders": return try encodeResult(handleBatchCompleteReminders(args), prefix: "Reminders completed:")
             case "list_calendars":    return try encodeResult(handleListCalendars(args))
+            case "get_calendar":      return try encodeResult(handleGetCalendar(args))
             case "create_calendar":   return try encodeResult(handleCreateCalendar(args), prefix: "Calendar created:")
             case "delete_calendar":   return try textResult(handleDeleteCalendar(args))
+            case "rename_calendar":   return try encodeResult(handleRenameCalendar(args), prefix: "Calendar renamed:")
+            case "list_sources":      return try encodeResult(handleListSources())
             case "check_availability": return try encodeResult(handleCheckAvailability(args))
             default:
                 return .init(content: [.text("Unknown tool: \(params.name)")], isError: true)
@@ -198,6 +214,111 @@ final class CalendarMCPServer {
         struct Input: Decodable { let calendarId: String }
         try calendarManager.deleteCalendar(identifier: decoder.decode(Input.self, from: data).calendarId)
         return "Calendar deleted successfully."
+    }
+
+    // MARK: - New Event Handlers
+
+    private func handleSearchEvents(_ data: Data) throws -> [CalendarEvent] {
+        struct Input: Decodable { let query: String; let startDate: String; let endDate: String; let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        let formatter = ISO8601DateFormatter()
+        guard let start = formatter.date(from: input.startDate) else { throw CalendarError.invalidInput("Invalid startDate") }
+        guard let end = formatter.date(from: input.endDate) else { throw CalendarError.invalidInput("Invalid endDate") }
+        return try calendarManager.searchEvents(query: input.query, from: start, to: end, calendarName: input.calendarName)
+    }
+
+    private func handleListUpcoming(_ data: Data) throws -> [CalendarEvent] {
+        struct Input: Decodable { let count: Int?; let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.listUpcomingEvents(count: input.count ?? 10, calendarName: input.calendarName)
+    }
+
+    private func handleMoveEvent(_ data: Data) throws -> CalendarEvent {
+        struct Input: Decodable { let eventId: String; let newStartDate: String; let newEndDate: String?; let applyToFutureEvents: Bool? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.moveEvent(
+            identifier: input.eventId, newStartDate: input.newStartDate,
+            newEndDate: input.newEndDate, applyToFutureEvents: input.applyToFutureEvents ?? false
+        )
+    }
+
+    private func handleDuplicateEvent(_ data: Data) throws -> CalendarEvent {
+        struct Input: Decodable { let eventId: String; let newStartDate: String; let newEndDate: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.duplicateEvent(identifier: input.eventId, newStartDate: input.newStartDate, newEndDate: input.newEndDate)
+    }
+
+    private func handleListRecurringEvents(_ data: Data) throws -> [CalendarEvent] {
+        struct Input: Decodable { let startDate: String; let endDate: String; let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        let formatter = ISO8601DateFormatter()
+        guard let start = formatter.date(from: input.startDate) else { throw CalendarError.invalidInput("Invalid startDate") }
+        guard let end = formatter.date(from: input.endDate) else { throw CalendarError.invalidInput("Invalid endDate") }
+        return try calendarManager.listRecurringEvents(from: start, to: end, calendarName: input.calendarName)
+    }
+
+    private func handleToday(_ data: Data) throws -> [CalendarEvent] {
+        struct Input: Decodable { let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.listTodayEvents(calendarName: input.calendarName)
+    }
+
+    private func handleTomorrow(_ data: Data) throws -> [CalendarEvent] {
+        struct Input: Decodable { let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.listTomorrowEvents(calendarName: input.calendarName)
+    }
+
+    // MARK: - New Reminder Handlers
+
+    private func handleGetReminder(_ data: Data) throws -> CalendarReminder {
+        struct Input: Decodable { let reminderId: String }
+        return try calendarManager.getReminder(identifier: decoder.decode(Input.self, from: data).reminderId)
+    }
+
+    private func handleSearchReminders(_ data: Data) async throws -> [CalendarReminder] {
+        struct Input: Decodable { let query: String; let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try await calendarManager.searchReminders(query: input.query, calendarName: input.calendarName)
+    }
+
+    private func handleCompleteReminder(_ data: Data) throws -> CalendarReminder {
+        struct Input: Decodable { let reminderId: String }
+        return try calendarManager.completeReminder(identifier: decoder.decode(Input.self, from: data).reminderId)
+    }
+
+    private func handleUncompleteReminder(_ data: Data) throws -> CalendarReminder {
+        struct Input: Decodable { let reminderId: String }
+        return try calendarManager.uncompleteReminder(identifier: decoder.decode(Input.self, from: data).reminderId)
+    }
+
+    private func handleListOverdueReminders(_ data: Data) async throws -> [CalendarReminder] {
+        struct Input: Decodable { let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try await calendarManager.listOverdueReminders(calendarName: input.calendarName)
+    }
+
+    private func handleBatchCompleteReminders(_ data: Data) throws -> [CalendarReminder] {
+        struct Input: Decodable { let reminderIds: [String] }
+        return try calendarManager.batchCompleteReminders(identifiers: decoder.decode(Input.self, from: data).reminderIds)
+    }
+
+    // MARK: - New Calendar Handlers
+
+    private func handleGetCalendar(_ data: Data) throws -> CalendarInfo {
+        struct Input: Decodable { let calendarId: String?; let calendarName: String? }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.getCalendar(identifier: input.calendarId, name: input.calendarName)
+    }
+
+    private func handleRenameCalendar(_ data: Data) throws -> CalendarInfo {
+        struct Input: Decodable { let calendarId: String; let newTitle: String }
+        let input = try decoder.decode(Input.self, from: data)
+        return try calendarManager.renameCalendar(identifier: input.calendarId, newTitle: input.newTitle)
+    }
+
+    private func handleListSources() throws -> [SourceInfo] {
+        calendarManager.listSources()
     }
 
     // MARK: - Availability
@@ -363,6 +484,128 @@ extension CalendarMCPServer {
                     "minimumSlotMinutes": intProp("Minimum free slot duration in minutes (default: 30)"),
                  ],
                  required: ["startDate", "endDate"]),
+
+            // New Event Tools
+
+            tool("search_events",
+                 "Full-text search across event titles, notes, and locations within a date range.",
+                 properties: [
+                    "query": stringProp("Search text to match against title, notes, and location"),
+                    "startDate": stringProp("Start of date range (ISO 8601)"),
+                    "endDate": stringProp("End of date range (ISO 8601)"),
+                    "calendarName": stringProp("Optional: filter to a specific calendar by name"),
+                 ],
+                 required: ["query", "startDate", "endDate"]),
+
+            tool("list_upcoming",
+                 "List the next N upcoming events starting from now. No date range needed.",
+                 properties: [
+                    "count": intProp("Number of upcoming events to return (default: 10)"),
+                    "calendarName": stringProp("Optional: filter to a specific calendar by name"),
+                 ]),
+
+            tool("move_event",
+                 "Move an event to a new time. Preserves duration unless a new end date is specified.",
+                 properties: [
+                    "eventId": stringProp("The unique identifier of the event to move"),
+                    "newStartDate": stringProp("New start time in ISO 8601 format"),
+                    "newEndDate": stringProp("Optional: new end time. If omitted, duration is preserved."),
+                    "applyToFutureEvents": boolProp("For recurring events: apply to future occurrences (default false)"),
+                 ],
+                 required: ["eventId", "newStartDate"]),
+
+            tool("duplicate_event",
+                 "Clone an existing event to a new date/time. Copies title, location, notes, URL, alarms, and calendar.",
+                 properties: [
+                    "eventId": stringProp("The unique identifier of the event to duplicate"),
+                    "newStartDate": stringProp("Start time for the duplicate in ISO 8601 format"),
+                    "newEndDate": stringProp("Optional: end time for the duplicate. If omitted, original duration is preserved."),
+                 ],
+                 required: ["eventId", "newStartDate"]),
+
+            tool("list_recurring_events",
+                 "List events that have recurrence rules within a date range.",
+                 properties: [
+                    "startDate": stringProp("Start of date range (ISO 8601)"),
+                    "endDate": stringProp("End of date range (ISO 8601)"),
+                    "calendarName": stringProp("Optional: filter to a specific calendar by name"),
+                 ],
+                 required: ["startDate", "endDate"]),
+
+            tool("today",
+                 "List all events for today. No date parameters needed.",
+                 properties: [
+                    "calendarName": stringProp("Optional: filter to a specific calendar by name"),
+                 ]),
+
+            tool("tomorrow",
+                 "List all events for tomorrow. No date parameters needed.",
+                 properties: [
+                    "calendarName": stringProp("Optional: filter to a specific calendar by name"),
+                 ]),
+
+            // New Reminder Tools
+
+            tool("get_reminder",
+                 "Get detailed information about a specific reminder by its ID.",
+                 properties: ["reminderId": stringProp("The unique identifier of the reminder")],
+                 required: ["reminderId"]),
+
+            tool("search_reminders",
+                 "Full-text search across reminder titles and notes.",
+                 properties: [
+                    "query": stringProp("Search text to match against title and notes"),
+                    "calendarName": stringProp("Optional: filter to a specific reminder list by name"),
+                 ],
+                 required: ["query"]),
+
+            tool("complete_reminder",
+                 "Mark a reminder as complete.",
+                 properties: ["reminderId": stringProp("The unique identifier of the reminder to complete")],
+                 required: ["reminderId"]),
+
+            tool("uncomplete_reminder",
+                 "Mark a previously completed reminder as incomplete.",
+                 properties: ["reminderId": stringProp("The unique identifier of the reminder to uncomplete")],
+                 required: ["reminderId"]),
+
+            tool("list_overdue_reminders",
+                 "List incomplete reminders that are past their due date.",
+                 properties: [
+                    "calendarName": stringProp("Optional: filter to a specific reminder list by name"),
+                 ]),
+
+            tool("batch_complete_reminders",
+                 "Mark multiple reminders as complete at once.",
+                 properties: [
+                    "reminderIds": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                        "description": .string("Array of reminder IDs to mark as complete"),
+                    ]),
+                 ],
+                 required: ["reminderIds"]),
+
+            // New Calendar Tools
+
+            tool("get_calendar",
+                 "Get detailed information about a specific calendar by its ID or name.",
+                 properties: [
+                    "calendarId": stringProp("The unique identifier of the calendar"),
+                    "calendarName": stringProp("The name of the calendar (used if calendarId is not provided)"),
+                 ]),
+
+            tool("rename_calendar",
+                 "Rename an existing calendar or reminder list.",
+                 properties: [
+                    "calendarId": stringProp("The unique identifier of the calendar to rename"),
+                    "newTitle": stringProp("The new name for the calendar"),
+                 ],
+                 required: ["calendarId", "newTitle"]),
+
+            tool("list_sources",
+                 "List all available calendar sources (iCloud, Exchange, Local, etc.).",
+                 properties: [:]),
         ]
     }
 }
