@@ -217,11 +217,7 @@ final class CalendarManager {
             store.predicateForCompletedReminders(withCompletionDateStarting: start, ending: end, calendars: calendars)
         }
 
-        return await withCheckedContinuation { continuation in
-            store.fetchReminders(matching: predicate) { reminders in
-                continuation.resume(returning: (reminders ?? []).map { CalendarReminder.from($0) })
-            }
-        }
+        return await fetchReminders(matching: predicate)
     }
 
     func createReminder(_ input: CreateReminderInput) throws -> CalendarReminder {
@@ -285,17 +281,11 @@ final class CalendarManager {
         let calendars = try calendarName.map { try resolveCalendars([$0], for: .reminder) }
         let predicate = store.predicateForReminders(in: calendars)
         let lowered = query.lowercased()
-        return await withCheckedContinuation { continuation in
-            store.fetchReminders(matching: predicate) { reminders in
-                let results = (reminders ?? [])
-                    .filter { r in
-                        [r.title, r.notes]
-                            .compactMap { $0?.lowercased() }
-                            .contains { $0.contains(lowered) }
-                    }
-                    .map { CalendarReminder.from($0) }
-                continuation.resume(returning: results)
-            }
+        let all = await fetchReminders(matching: predicate)
+        return all.filter { r in
+            [r.title, r.notes]
+                .compactMap { $0?.lowercased() }
+                .contains { $0.contains(lowered) }
         }
     }
 
@@ -327,11 +317,7 @@ final class CalendarManager {
         let predicate = store.predicateForIncompleteReminders(
             withDueDateStarting: nil, ending: Date(), calendars: calendars
         )
-        return await withCheckedContinuation { continuation in
-            store.fetchReminders(matching: predicate) { reminders in
-                continuation.resume(returning: (reminders ?? []).map { CalendarReminder.from($0) })
-            }
-        }
+        return await fetchReminders(matching: predicate)
     }
 
     func batchCompleteReminders(identifiers: [String]) throws -> [CalendarReminder] {
@@ -509,6 +495,34 @@ private extension CalendarManager {
         let end = cal.date(byAdding: .day, value: 1, to: start)!
         return (start, end)
     }
+}
+
+// MARK: - Async Reminder Fetching
+
+// EKEventStore.fetchReminders dispatches its completion handler on an internal queue.
+// When called from @MainActor with withCheckedContinuation, the callback can deadlock
+// because EventKit internally may need the main thread. We use Task.detached to ensure
+// the continuation is set up off the main actor, preventing deadlock.
+// nonisolated(unsafe) is required because EKEventStore and NSPredicate are not Sendable,
+// but EKEventStore.fetchReminders is documented as thread-safe.
+extension CalendarManager {
+    func fetchReminders(matching predicate: NSPredicate) async -> [CalendarReminder] {
+        let box = UnsafeSendableBox(store: store, predicate: predicate)
+        return await Task.detached {
+            await withCheckedContinuation { continuation in
+                box.store.fetchReminders(matching: box.predicate) { reminders in
+                    continuation.resume(returning: (reminders ?? []).map(CalendarReminder.from))
+                }
+            }
+        }.value
+    }
+}
+
+// EKEventStore.fetchReminders is documented as thread-safe. This box bypasses
+// Sendable checks to allow calling it from a detached task.
+private struct UnsafeSendableBox: @unchecked Sendable {
+    let store: EKEventStore
+    let predicate: NSPredicate
 }
 
 // MARK: - Date Parsing

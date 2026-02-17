@@ -210,7 +210,6 @@ extension CalendarEvent.Attendee {
 // MARK: - EKReminder Conversion
 
 extension CalendarReminder {
-    @MainActor
     static func from(_ reminder: EKReminder) -> CalendarReminder {
         CalendarReminder(
             identifier: reminder.calendarItemIdentifier,
