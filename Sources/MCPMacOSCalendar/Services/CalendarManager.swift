@@ -18,7 +18,11 @@ final class CalendarManager {
     // MARK: - Access
 
     func requestEventAccess() async throws {
-        hasEventAccess = try await store.requestFullAccessToEvents()
+        // EKEventStore is thread-safe for access requests. nonisolated(unsafe)
+        // avoids the strict-concurrency diagnostic when sending a @MainActor
+        // property to the nonisolated requestFullAccessToEvents() method.
+        nonisolated(unsafe) let s = store
+        hasEventAccess = try await s.requestFullAccessToEvents()
         guard hasEventAccess else {
             throw CalendarError.accessDenied(
                 "Calendar event access not granted. Go to System Settings > Privacy & Security > Calendars and enable access."
@@ -28,7 +32,8 @@ final class CalendarManager {
     }
 
     func requestReminderAccess() async throws {
-        hasReminderAccess = try await store.requestFullAccessToReminders()
+        nonisolated(unsafe) let s = store
+        hasReminderAccess = try await s.requestFullAccessToReminders()
         guard hasReminderAccess else {
             throw CalendarError.accessDenied(
                 "Reminders access not granted. Go to System Settings > Privacy & Security > Reminders and enable access."
