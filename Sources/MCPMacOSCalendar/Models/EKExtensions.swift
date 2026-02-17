@@ -58,6 +58,18 @@ extension EKParticipantStatus {
     }
 }
 
+extension EKEventStatus {
+    var label: String {
+        switch self {
+        case .none: "none"
+        case .confirmed: "confirmed"
+        case .tentative: "tentative"
+        case .canceled: "cancelled"
+        @unknown default: "unknown"
+        }
+    }
+}
+
 extension EKCalendarType {
     var label: String {
         switch self {

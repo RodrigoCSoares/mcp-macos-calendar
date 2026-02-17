@@ -34,7 +34,8 @@ extension CalendarMCPServer {
                     "startDate": stringProp("Start time in ISO 8601 format"),
                     "endDate": stringProp("End time in ISO 8601 format"),
                     "isAllDay": boolProp("Whether this is an all-day event (default false)"),
-                    "location": stringProp("Event location"),
+                    "location": stringProp("Event location (text)"),
+                    "structuredLocation": structuredLocationSchema,
                     "notes": stringProp("Event notes/description"),
                     "url": stringProp("URL associated with the event"),
                     "calendarName": stringProp("Target calendar name. Uses default if not specified."),
@@ -51,7 +52,8 @@ extension CalendarMCPServer {
                     "startDate": stringProp("New start time in ISO 8601 format"),
                     "endDate": stringProp("New end time in ISO 8601 format"),
                     "isAllDay": boolProp("Whether this is an all-day event"),
-                    "location": stringProp("New event location"),
+                    "location": stringProp("New event location (text)"),
+                    "structuredLocation": structuredLocationSchema,
                     "notes": stringProp("New event notes"),
                     "url": stringProp("New URL"),
                     "calendarName": stringProp("Move event to this calendar"),
@@ -298,6 +300,18 @@ private func intArrayProp(_ description: String) -> Value {
 private func enumProp(_ values: [String], _ description: String) -> Value {
     .object(["type": .string("string"), "enum": .array(values.map { .string($0) }), "description": .string(description)])
 }
+
+private let structuredLocationSchema: Value = .object([
+    "type": .string("object"),
+    "description": .string("Geo-coordinates for the event location. Sets lat/lng on the event's structured location."),
+    "properties": .object([
+        "title": stringProp("Location name (e.g. 'Apple Park')"),
+        "latitude": .object(["type": .string("number"), "description": .string("Latitude coordinate")]),
+        "longitude": .object(["type": .string("number"), "description": .string("Longitude coordinate")]),
+        "radius": .object(["type": .string("number"), "description": .string("Geofence radius in meters (optional)")]),
+    ]),
+    "required": .array([.string("latitude"), .string("longitude")]),
+])
 
 private let recurrenceSchema: Value = .object([
     "type": .string("object"),

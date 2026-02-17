@@ -21,3 +21,4 @@ struct AvailabilityResult: Codable, Sendable {
     let totalFreeMinutes: Int
     let totalBusyMinutes: Int
 }
+

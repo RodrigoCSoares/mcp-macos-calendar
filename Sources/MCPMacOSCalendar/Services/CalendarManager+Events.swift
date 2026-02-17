@@ -1,3 +1,4 @@
+import CoreLocation
 import EventKit
 import Foundation
 
@@ -30,6 +31,7 @@ extension CalendarManager {
         event.endDate = end
         event.isAllDay = input.isAllDay ?? false
         input.location.map { event.location = $0 }
+        input.structuredLocation.map { event.structuredLocation = $0.toEKStructuredLocation() }
         input.notes.map { event.notes = $0 }
         input.url.flatMap(URL.init(string:)).map { event.url = $0 }
         event.calendar = try input.calendarName.map { try resolveCalendar($0, for: .event) }
@@ -50,6 +52,7 @@ extension CalendarManager {
         if let e = input.endDate { event.endDate = try ISO8601Parsing.require(e, label: "end date") }
         input.isAllDay.map { event.isAllDay = $0 }
         input.location.map { event.location = $0 }
+        input.structuredLocation.map { event.structuredLocation = $0.toEKStructuredLocation() }
         input.notes.map { event.notes = $0 }
         input.url.flatMap(URL.init(string:)).map { event.url = $0 }
         if let name = input.calendarName { event.calendar = try resolveCalendar(name, for: .event) }

@@ -5,6 +5,7 @@ import Foundation
 
 struct CalendarReminder: Codable, Sendable {
     let identifier: String
+    let externalIdentifier: String?
     let title: String
     let isCompleted: Bool
     let completionDate: Date?
@@ -14,6 +15,8 @@ struct CalendarReminder: Codable, Sendable {
     let notes: String?
     let calendarName: String
     let hasRecurrenceRules: Bool
+    let creationDate: Date?
+    let lastModifiedDate: Date?
 }
 
 struct CreateReminderInput: Codable, Sendable {
@@ -52,6 +55,7 @@ extension CalendarReminder {
     static func from(_ reminder: EKReminder) -> CalendarReminder {
         CalendarReminder(
             identifier: reminder.calendarItemIdentifier,
+            externalIdentifier: reminder.calendarItemExternalIdentifier,
             title: reminder.title ?? "Untitled",
             isCompleted: reminder.isCompleted,
             completionDate: reminder.completionDate,
@@ -60,7 +64,9 @@ extension CalendarReminder {
             priority: reminder.priority,
             notes: reminder.notes,
             calendarName: reminder.calendar?.title ?? "Unknown",
-            hasRecurrenceRules: reminder.hasRecurrenceRules
+            hasRecurrenceRules: reminder.hasRecurrenceRules,
+            creationDate: reminder.creationDate,
+            lastModifiedDate: reminder.lastModifiedDate
         )
     }
 }

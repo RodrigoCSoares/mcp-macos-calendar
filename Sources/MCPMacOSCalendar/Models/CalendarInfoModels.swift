@@ -9,6 +9,7 @@ struct CalendarInfo: Codable, Sendable {
     let type: String
     let sourceName: String
     let isImmutable: Bool
+    let isSubscribed: Bool
     let allowsContentModifications: Bool
     let color: String?
 }
@@ -30,6 +31,7 @@ extension CalendarInfo {
             type: calendar.type.label,
             sourceName: calendar.source?.title ?? "Unknown",
             isImmutable: calendar.isImmutable,
+            isSubscribed: calendar.isSubscribed,
             allowsContentModifications: calendar.allowsContentModifications,
             color: calendar.cgColor.map(Self.colorToHex)
         )
