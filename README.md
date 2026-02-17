@@ -22,18 +22,47 @@ A native Swift MCP server for macOS Calendar and Reminders. Gives AI assistants 
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
-- Swift 6.0+
 - Calendar and Reminders permissions (prompted on first run)
 
-## Build
+## Install
+
+### Pre-built binary (recommended)
+
+Download the latest universal binary from [GitHub Releases](https://github.com/RodrigoCSoares/mcp-macos-calendar/releases):
 
 ```bash
-git clone https://github.com/user/mcp-macos-calendar.git
-cd mcp-macos-calendar
-swift build
+# Download and extract the latest release
+curl -L https://github.com/RodrigoCSoares/mcp-macos-calendar/releases/latest/download/mcp-macos-calendar-macos-universal.tar.gz | tar xz
+
+# Move to a directory in your PATH
+mv mcp-macos-calendar /usr/local/bin/
 ```
 
-The binary will be at `.build/debug/MCPMacOSCalendar`.
+No Xcode or Swift toolchain required.
+
+### Mint
+
+If you have [Mint](https://github.com/yonaskolb/Mint) installed:
+
+```bash
+mint install RodrigoCSoares/mcp-macos-calendar
+```
+
+### Homebrew
+
+A Homebrew tap is planned -- contributions welcome.
+
+### Build from source
+
+Requires Swift 6.0+ (Xcode 16+).
+
+```bash
+git clone https://github.com/RodrigoCSoares/mcp-macos-calendar.git
+cd mcp-macos-calendar
+swift build -c release
+```
+
+The binary will be at `.build/release/MCPMacOSCalendar`.
 
 ## Setup
 
@@ -45,12 +74,14 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 {
   "mcpServers": {
     "calendar": {
-      "command": "/path/to/mcp-macos-calendar/.build/debug/MCPMacOSCalendar",
+      "command": "mcp-macos-calendar",
       "args": ["--transport", "stdio"]
     }
   }
 }
 ```
+
+> If the binary is not in your `PATH`, use the full path instead (e.g. `/usr/local/bin/mcp-macos-calendar`).
 
 ### OpenCode
 
@@ -61,7 +92,7 @@ Add to your OpenCode config (`~/.config/opencode/opencode.json`):
   "mcp": {
     "calendar": {
       "type": "local",
-      "command": ["/path/to/mcp-macos-calendar/.build/debug/MCPMacOSCalendar", "--transport", "stdio"],
+      "command": ["mcp-macos-calendar", "--transport", "stdio"],
       "enabled": true
     }
   }
@@ -73,7 +104,7 @@ Add to your OpenCode config (`~/.config/opencode/opencode.json`):
 For clients that support Streamable HTTP transport:
 
 ```bash
-.build/debug/MCPMacOSCalendar --transport http --port 8080
+mcp-macos-calendar --transport http --port 8080
 ```
 
 The MCP endpoint will be available at `http://127.0.0.1:8080/mcp`.

@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build universal binary
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal binary (arm64 + x86_64)
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Ad-hoc codesign
+        run: codesign -s - -f .build/apple/Products/Release/MCPMacOSCalendar
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp .build/apple/Products/Release/MCPMacOSCalendar dist/mcp-macos-calendar
+          cd dist
+          tar czf mcp-macos-calendar-macos-universal.tar.gz mcp-macos-calendar
+          shasum -a 256 mcp-macos-calendar-macos-universal.tar.gz > mcp-macos-calendar-macos-universal.tar.gz.sha256
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/mcp-macos-calendar-macos-universal.tar.gz
+            dist/mcp-macos-calendar-macos-universal.tar.gz.sha256
