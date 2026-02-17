@@ -37,9 +37,24 @@ actor StreamableHTTPTransport: Transport {
 
         router.post("/mcp") { request, _ -> Response in
             let body = try await request.body.collect(upTo: 1_048_576)
-            inboundCont.yield(Data(buffer: body))
+            let data = Data(buffer: body)
 
-            let responseData = await respStore.waitForResponse()
+            // Parse just enough to detect notification vs request
+            let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let requestId = parsed?["id"]
+
+            if requestId == nil {
+                // JSON-RPC notification (no id) — no response expected from server
+                inboundCont.yield(data)
+                return Response(status: .accepted)
+            }
+
+            // JSON-RPC request — register a pending response before yielding
+            let responseId = ResponseStore.ResponseId()
+            await respStore.register(responseId)
+            inboundCont.yield(data)
+
+            let responseData = await respStore.waitForResponse(responseId)
             return Response(
                 status: .ok,
                 headers: [
@@ -73,7 +88,7 @@ actor StreamableHTTPTransport: Transport {
     }
 
     func send(_ data: Data) async throws {
-        await responseStore.setResponse(data)
+        await responseStore.deliverNext(data)
     }
 
     func receive() -> AsyncThrowingStream<Data, any Error> {
@@ -87,17 +102,31 @@ actor StreamableHTTPTransport: Transport {
     }
 }
 
-private actor ResponseStore {
-    private var responseContinuation: CheckedContinuation<Data, Never>?
+// MARK: - Response Store
 
-    func waitForResponse() async -> Data {
+// Manages pending HTTP responses for concurrent JSON-RPC requests.
+// Each incoming request registers a response slot, and `send()` delivers
+// responses in FIFO order (matching the MCP server's sequential processing).
+private actor ResponseStore {
+    struct ResponseId: Hashable { private let id = UUID() }
+
+    private var pending: [(id: ResponseId, continuation: CheckedContinuation<Data, Never>)] = []
+    private var registered: [ResponseId] = []
+
+    func register(_ id: ResponseId) {
+        registered.append(id)
+    }
+
+    func waitForResponse(_ id: ResponseId) async -> Data {
         await withCheckedContinuation { continuation in
-            self.responseContinuation = continuation
+            pending.append((id: id, continuation: continuation))
         }
     }
 
-    func setResponse(_ data: Data) {
-        responseContinuation?.resume(returning: data)
-        responseContinuation = nil
+    func deliverNext(_ data: Data) {
+        guard !pending.isEmpty else { return }
+        let entry = pending.removeFirst()
+        registered.removeAll { $0 == entry.id }
+        entry.continuation.resume(returning: data)
     }
 }
