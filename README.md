@@ -48,10 +48,6 @@ If you have [Mint](https://github.com/yonaskolb/Mint) installed:
 mint install RodrigoCSoares/mcp-macos-calendar
 ```
 
-### Homebrew
-
-A Homebrew tap is planned -- contributions welcome.
-
 ### Build from source
 
 Requires Swift 6.0+ (Xcode 16+).
@@ -182,3 +178,7 @@ OPTIONS:
   --version                     Show the version
   -h, --help                    Show help information
 ```
+
+## Roadmap
+
+- [ ] Homebrew tap (`brew install RodrigoCSoares/tap/mcp-macos-calendar`)
