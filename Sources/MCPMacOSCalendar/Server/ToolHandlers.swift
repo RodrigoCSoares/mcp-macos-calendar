@@ -2,6 +2,39 @@ import EventKit
 import Foundation
 import MCP
 
+// MARK: - Time Tool Handler
+
+extension CalendarMCPServer {
+
+    struct CurrentTimeResult: Encodable {
+        let dateTime: String
+        let timeZone: String
+        let utcOffset: String
+    }
+
+    func handleGetCurrentTime() -> CurrentTimeResult {
+        let now = Date()
+        let tz = TimeZone.current
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        iso.timeZone = tz
+
+        let offsetSeconds = tz.secondsFromGMT(for: now)
+        let sign = offsetSeconds >= 0 ? "+" : "-"
+        let absOffset = abs(offsetSeconds)
+        let hours = absOffset / 3600
+        let minutes = (absOffset % 3600) / 60
+        let utcOffset = String(format: "%@%02d:%02d", sign, hours, minutes)
+
+        return CurrentTimeResult(
+            dateTime: iso.string(from: now),
+            timeZone: tz.identifier,
+            utcOffset: utcOffset
+        )
+    }
+}
+
 // MARK: - Event Tool Handlers
 
 extension CalendarMCPServer {

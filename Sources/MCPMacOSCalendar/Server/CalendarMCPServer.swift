@@ -25,6 +25,13 @@ final class CalendarMCPServer {
         self.server = Server(
             name: "mcp-macos-calendar",
             version: "1.0.0",
+            instructions: """
+                This server provides access to the macOS Calendar (EventKit) and Reminders. \
+                All dates are in the system's local timezone. \
+                Many tools require ISO 8601 date strings — before constructing dates, \
+                call the `get_current_time` tool to get the current date, time, and timezone. \
+                Alternatively, use `today`, `tomorrow`, or `list_upcoming` which do not require date parameters.
+                """,
             capabilities: .init(
                 resources: .init(subscribe: false, listChanged: false),
                 tools: .init(listChanged: false)
@@ -79,6 +86,7 @@ final class CalendarMCPServer {
             let args = try encoder.encode(params.arguments ?? [:])
 
             switch params.name {
+            case "get_current_time": return try encodeResult(handleGetCurrentTime())
             case "list_events":       return try encodeResult(handleListEvents(args))
             case "get_event":         return try encodeResult(handleGetEvent(args))
             case "create_event":      return try encodeResult(handleCreateEvent(args), prefix: "Event created successfully:")

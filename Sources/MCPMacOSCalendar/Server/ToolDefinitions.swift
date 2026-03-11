@@ -13,6 +13,10 @@ struct DateRangeInput: Decodable { let startDate: String; let endDate: String; l
 extension CalendarMCPServer {
     var toolDefinitions: [Tool] {
         [
+            tool("get_current_time",
+                 "Get the current date, time, and timezone of the system. Use this before any tool that requires ISO 8601 date parameters so you know what 'now' is.",
+                 properties: [:]),
+
             tool("list_events",
                  "List calendar events within a date range. Returns event details including title, time, location, and attendees.",
                  properties: [
