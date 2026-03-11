@@ -6,17 +6,17 @@ A native Swift MCP server for macOS Calendar and Reminders. Gives AI assistants 
 
 ## Features
 
-- **29 tools** covering events, reminders, calendars, and availability
-- **3 resources** for browsing calendars and sources
 - Full CRUD for events and reminders
 - Search events and reminders by text
 - Convenience tools: `today`, `tomorrow`, `list_upcoming`, `complete_reminder`
+- Time-aware: `get_current_time` tool and server instructions so agents know the current date, time, and timezone
 - Batch operations (complete multiple reminders at once)
 - Recurrence rules (daily, weekly, monthly, yearly with advanced options)
 - Attendees (read-only) and availability checking
 - Multiple alarm support
 - Works with all calendar sources (iCloud, Exchange, Google, CalDAV, local)
-- **Two transport modes**: stdio (for Claude Desktop / OpenCode) and Streamable HTTP
+- Two transport modes: stdio (for Claude Desktop / OpenCode) and Streamable HTTP
+- Resources for browsing calendars and sources
 - Strict Swift 6 concurrency
 
 ## Requirements
@@ -112,6 +112,12 @@ On first run, macOS will prompt you to grant Calendar and Reminders access. You 
 If you deny Reminders access, the server will still work for calendar events -- reminder tools will return errors.
 
 ## Tools
+
+### Utility
+
+| Tool | Description |
+|---|---|
+| `get_current_time` | Get the current date, time, and timezone of the system |
 
 ### Events
 
